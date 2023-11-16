@@ -1,7 +1,7 @@
 from decode_email import cfDecodeEmail
 from bs4 import BeautifulSoup
 from links_array import links
-import requests, re, base64
+import requests, re
 
 data_list = []
 headers = {
@@ -129,7 +129,7 @@ def scrape_page(url):
     sales_after_service = soup.find('div', class_='field--name-field-after-sales-service')
     data_dict['Sales After Service'] = sales_after_service.get_text(strip=True) if sales_after_service else None
 
+    data_list.append(data_dict)
 
-    print(data_dict)
-
-scrape_page('https://www.pmmi.org/sales-agent-directory/profile/robertpack-bv')
+for link in links:
+    scrape_page(link)
