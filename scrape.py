@@ -1,15 +1,11 @@
 from decode_email import cfDecodeEmail
 from bs4 import BeautifulSoup
-import requests, re
+from links_array import links
+import requests, re, base64
 
 data_list = []
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-
-
-def get_element_text(soup, class_name):
-    element = soup.find(class_=class_name)
-    return element.get_text(strip=True) if element else None
 
 
 def scrape_page(url):
@@ -18,18 +14,21 @@ def scrape_page(url):
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # Name
-    data_dict['Name'] = get_element_text(soup, 'node-title')
+    # Name
+    name = soup.find(class_='node-title')
+    data_dict['Name'] = name.get_text(strip=True) if name else None
 
-    # Simple address
-    data_dict['Simple Address'] = get_element_text(soup, 'adress-simple')
+    # Simple Address
+    simple_address = soup.find(class_='adress-simple')
+    data_dict['Simple Address'] = simple_address.get_text(strip=True) if simple_address else None
 
-    # Cellphone number
-    data_dict['Cellphone Number'] = get_element_text(soup, 'field--type-telephone')
+    # Cellphone Number
+    cellphone_number = soup.find(class_='field--type-telephone')
+    data_dict['Cellphone Number'] = cellphone_number.get_text(strip=True) if cellphone_number else None
 
-    # Company email
+    # Email
     company_email_element = soup.find(class_='field--type-email')
     span_element = company_email_element.find('span', class_='__cf_email__')
-
     if span_element:
         match = re.search(r'data-cfemail="(.+?)"', str(span_element))
         data_dict['Company Email'] = cfDecodeEmail(match.group(1)) if match else None
@@ -37,66 +36,99 @@ def scrape_page(url):
         data_dict['Company Email'] = None
 
     # Website
-    data_dict['Site'] = get_element_text(soup, 'field-name-field-website-url')
+    website = soup.find(class_='field-name-field-website-url')
+    data_dict['Site'] = website.get_text(strip=True) if website else None
 
-    # Youtube
-    youtube_element = soup.find(class_='field--name-field-company-youtube')
-    data_dict['Youtube Link'] = youtube_element.find('a')['href'] if youtube_element else None
+    # YouTube
+    youtube_link = None
+    youtube_tag = soup.find(class_='field--name-field-company-youtube')
+    data_dict['Youtube Link'] = youtube_tag.find('a')['href'] if youtube_tag else None
 
-    # Territory covered
-    data_dict['Territory Covered'] = get_element_text(soup, 'field--type-country-area')
+    # Territory Covered
+    territory = soup.find(class_='field--type-country-area')
+    data_dict['Territory Covered'] = territory.get_text(strip=True) if territory else None
 
-    # Lines of business
-    data_dict['Lines of Business'] = get_element_text(soup, 'field--name-field-business-lines')
+    # Lines of Business
+    lines_business = soup.find(class_='field--name-field-business-lines')
+    data_dict['Lines of Business'] = lines_business.get_text(strip=True) if lines_business else None
 
-    # Manufacturers represented
-    data_dict['Manufacturers Represented'] = get_element_text(soup, 'field--name-field-manufacturers-represented')
+    # Manufacturers Represented
+    manufacturers_represented = soup.find(class_='field--name-field-manufacturers-represented')
+    data_dict['Manufacturers Represented'] = manufacturers_represented.get_text(strip=True) if manufacturers_represented else None
 
     # Fax
     fax_div = soup.find('div', class_='field-name-field-fax-number')
-    data_dict['Fax'] = fax_div.find('span').get_text(strip=True) if fax_div else None
+    if fax_div:
+        fax_number_with_label = ' '.join(fax_div.stripped_strings)
+        label = 'Fax:'
+        fax_number = fax_number_with_label[len(label):].strip()
+        data_dict['Fax'] = fax_number
+    else:
+        data_dict['Fax'] = None
 
     # Address
     company_section = soup.find('div', class_='company col-md-4')
-    data_dict['Address Line 1'] = get_element_text(company_section, 'address-line1')
-    data_dict['Address Line 2'] = get_element_text(company_section, 'address-line2')
-    data_dict['Locality'] = get_element_text(company_section, 'locality')
-    data_dict['Administrative Area'] = get_element_text(company_section, 'administrative-area')
-    data_dict['Postal Code'] = get_element_text(company_section, 'postal-code')
-    data_dict['Country'] = get_element_text(company_section, 'country')
+    address1 = company_section.find('span', class_='address-line1')
+    data_dict['Address Line 1'] = address1.get_text(strip=True) if address1 else None
 
-    # Primary contact
+    address2 = company_section.find('span', class_='address-line2')
+    data_dict['Address Line 2'] = address2.get_text(strip=True) if address2 else None
+
+    locality = company_section.find('span', class_='locality')
+    data_dict['Locality'] = locality.get_text(strip=True) if locality else None
+
+    administrative_area = company_section.find('span', class_='administrative-area')
+    data_dict['Administrative Area'] = administrative_area.get_text(strip=True) if administrative_area else None
+
+    postal_code = company_section.find('span', class_='postal-code')
+    data_dict['Postal Code'] = postal_code.get_text(strip=True) if postal_code else None
+
+    country = company_section.find('span', class_='country')
+    data_dict['Country'] = country.get_text(strip=True) if country else None
+
     contacts_section = soup.find('div', class_='primary-contacts')
-    fst_name = get_element_text(contacts_section, 'field--name-field-primary-contact-first-name')
-    scnd_name = get_element_text(contacts_section, 'field--name-field-primary-contact-last-name')
+    if contacts_section:
+        fst_name = contacts_section.find('div', class_='field--name-field-primary-contact-first-name')
+        scnd_name = contacts_section.find('div', class_='field--name-field-primary-contact-last-name')
+        if fst_name and scnd_name:
+            full_name = f"{fst_name.get_text(strip=True)} {scnd_name.get_text(strip=True)}"
+            title = contacts_section.find('div', class_='field--name-field-primary-contact-title')
+            if title:
+                full_name += f", {title.get_text(strip=True)}"
+            data_dict['Contact name'] = full_name
+        else:
+            data_dict['Contact name'] = None
+    else:
+        data_dict['Contact name'] = None
 
-    if fst_name and scnd_name:
-        full_name = f"{fst_name} {scnd_name}"
-        title = get_element_text(contacts_section, 'field--name-field-primary-contact-title')
-        if title:
-            full_name += f", {title}"
-        data_dict['Contact name'] = full_name
+    mobile = contacts_section.find('div', class_='field-name-field-primary-contact-mobile')
+    data_dict['Primary Number Contact'] = ' '.join(mobile.stripped_strings)[7:].strip() if mobile else None
 
-    # Mobile
-    mobile = get_element_text(contacts_section, 'field-name-field-primary-contact-mobile')
-    data_dict['Primary Number Contact'] = mobile.split(":")[-1].strip() if mobile else None
-
-    # Primary Email Contact
     email_span = soup.find('div', class_='field--name-field-primary-contact-email')
     match = re.search(r'data-cfemail="(.+?)"', str(email_span))
-    data_dict['Primary Email Contact'] = cfDecodeEmail(match.group(1)) if match else None
+    if email_span and match:
+        encrypted_email = match.group(1)
+        decoded_email = cfDecodeEmail(encrypted_email)
+        data_dict['Primary Email Contact'] = decoded_email
+    else:
+        data_dict['Primary Email Contact'] = None
 
     # Description
-    data_dict['Description'] = get_element_text(soup, 'field--name-field-company-description')
+    description = soup.find('div', class_='field--name-field-company-description')
+    data_dict['Description'] = description.get_text(strip=True) if description else None
 
-    # Industries served
-    data_dict['Industries Served'] = get_element_text(soup, 'field--name-field-industries-served-other')
+    # Industries Served
+    industries_served = soup.find('div', class_='field--name-field-industries-served-other')
+    data_dict['Industries Served'] = industries_served.get_text(strip=True) if industries_served else None
 
-    # Type of Equipment
-    data_dict['Type of Equipment'] = get_element_text(soup, 'field--name-field-equipment-sold-type-other')
+    # Type of Equipment Sold
+    type_equipment = soup.find('div', class_='field--name-field-equipment-sold-type-other')
+    data_dict['Type of Equipment'] = type_equipment.get_text(strip=True) if type_equipment else None
 
     # Sales After Service
-    data_dict['Sales After Service'] = get_element_text(soup, 'field--name-field-after-sales-service')
+    sales_after_service = soup.find('div', class_='field--name-field-after-sales-service')
+    data_dict['Sales After Service'] = sales_after_service.get_text(strip=True) if sales_after_service else None
+
 
     print(data_dict)
 
